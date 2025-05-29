@@ -20,7 +20,10 @@ generatePlants = (count = 6) => {
       element: plantElement,
       name: i,
       stage: 0,
-      watered_this_turn: false
+      watered_this_turn: false,
+      timer: null,
+      hasStarted: false,
+      hasBugs: false
     });
 
     updatePlantImage(plants[i]);
@@ -109,6 +112,34 @@ setSelectedTool = (tool) => {
   game.game_information_tool.textContent = `Selected Tool: ${tool}`;
 }
 
+setAllPlantsUnwatered = () => {
+  game.plants.forEach(plant => {
+    plant.watered_this_turn = false;
+    const waterOverlay = plant.element.querySelector('.water-overlay');
+    waterOverlay.style.backgroundImage = 'none';
+    waterOverlay.style.opacity = '0';
+  });
+}
+
+resetPlant = (plant) => {
+  plant.stage = 0;
+  plant.watered_this_turn = false;
+  plant.hasBugs = false;
+  if (plant.timer) {
+    clearInterval(plant.timer);
+    plant.timer = null;
+    plant.hasStarted = false;
+  }
+  // Clear all overlays
+  const waterOverlay = plant.element.querySelector('.water-overlay');
+  waterOverlay.style.backgroundImage = 'none';
+  waterOverlay.style.opacity = '0';
+  const bugOverlay = plant.element.querySelector('.bug-overlay');
+  bugOverlay.style.backgroundImage = 'none';
+  bugOverlay.style.opacity = '0';
+  updatePlantImage(plant);
+}
+
 plantClick = (plant) => {
     if (plant.stage < game.game_max_plant_stage && game.game_selected_tool === 'water' && !plant.watered_this_turn) {
         const waterOverlay = plant.element.querySelector('.water-overlay');
@@ -116,12 +147,28 @@ plantClick = (plant) => {
         waterOverlay.style.opacity = '1';
         plant.watered_this_turn = true;
 
+        // Start the plant's timer if it hasn't started yet
+        if (!plant.hasStarted) {
+            plant.hasStarted = true;
+            plant.timer = setInterval(() => {
+                if (plant.stage > 0 && !plant.watered_this_turn) {
+                    plant.stage--;
+                    updatePlantImage(plant);
+                }
+                plant.watered_this_turn = false;
+                const waterOverlay = plant.element.querySelector('.water-overlay');
+                waterOverlay.style.backgroundImage = 'none';
+                waterOverlay.style.opacity = '0';
+                checkWinCondition();
+            }, game.game_stage_interval);
+        }
+
         if (game.game_event === 'poison') {
             plant.stage -= 2;
             if (plant.stage < 0) {
                 plant.stage = 0;
             }
-        } else if (plant.element.querySelector('.bug-overlay').style.opacity === '1') {
+        } else if (plant.hasBugs) {
             plant.stage--;
             if (plant.stage < 0) {
                 plant.stage = 0;
@@ -135,46 +182,26 @@ plantClick = (plant) => {
     if (plant.stage === game.game_max_plant_stage && game.game_selected_tool === 'harvest') {
       game.game_harvest_count++;
       game.game_information_progress.textContent = `Plants Harvested: ${game.game_harvest_count} / ${game.game_harvest_count_max}`;
-      plant.stage = 0;
-      updatePlantImage(plant);
+      resetPlant(plant);
     } else if (plant.stage < game.game_max_plant_stage && game.game_selected_tool === 'harvest') {
-      plant.stage = 0;
-      updatePlantImage(plant);
-    } else if (plant.stage < game.game_max_plant_stage && game.game_selected_tool === 'debugger') {
+      resetPlant(plant);
+    } else if (game.game_selected_tool === 'debugger' && plant.hasBugs) {
+      plant.hasBugs = false;
       const bugOverlay = plant.element.querySelector('.bug-overlay');
       bugOverlay.style.backgroundImage = 'none';
       bugOverlay.style.opacity = '0';
-      updatePlantImage(plant);
     }
-
 }
-
-setAllPlantsUnwatered = () => {
-  game.plants.forEach(plant => {
-    plant.watered_this_turn = false;
-    const waterOverlay = plant.element.querySelector('.water-overlay');
-    waterOverlay.style.backgroundImage = 'none';
-    waterOverlay.style.opacity = '0';
-  });
-}
-
-
-const gameStageInterval = setInterval(() => {
-  game.plants.forEach(plant => {
-    if (plant.stage > 0 && !plant.watered_this_turn) {  
-      plant.stage--;
-      updatePlantImage(plant);
-    }
-  });
-  setAllPlantsUnwatered();
-  checkWinCondition();
-}, game.game_stage_interval);
-
 
 checkWinCondition = () => {
   if (game.game_harvest_count >= game.game_harvest_count_max) {
-
-    clearInterval(gameStageInterval);
+    // Clear all plant timers
+    game.plants.forEach(plant => {
+      if (plant.timer) {
+        clearInterval(plant.timer);
+        plant.timer = null;
+      }
+    });
     clearInterval(gameEventInterval);
     const event = document.getElementById('garden-event');
     event.style.display = 'none';
@@ -227,6 +254,7 @@ const gameEventInterval = setInterval(() => {
           event.textContent = 'Pests! They are eating your plants!';
           // enable bug overlays
           game.plants.forEach(plant => {
+            plant.hasBugs = true;
             const bugOverlay = plant.element.querySelector('.bug-overlay');
             bugOverlay.style.backgroundImage = 'url(imgs/bugs.png)';
             bugOverlay.style.opacity = '1';
