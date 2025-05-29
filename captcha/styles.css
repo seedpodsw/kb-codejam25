@@ -15,6 +15,7 @@ body {
 #garden {
     display: flex;
     cursor: default;
+    background-color: rgb(190, 237, 255);
 }
 
 .water-icon {

@@ -1,3 +1,29 @@
+/* Game Rules and Logic:
+ * 1. Goal: Harvest a specific number of fully grown plants (6 for easy, 12 for medium, 18 for hard)
+ * 
+ * 2. Tools:
+ *    - Water: Waters plants to help them grow
+ *    - Debugger: Removes bugs from plants
+ *    - Harvest: Collects fully grown plants
+ * 
+ * 3. Plant Growth:
+ *    - Plants have 5 stages (0-4)
+ *    - Must be watered each turn to grow
+ *    - Will regress one stage if not watered
+ *    - Can only be harvested at max stage (4)
+ * 
+ * 4. Events:
+ *    - Occur randomly based on difficulty (chance: easy 50%, medium 70%, hard 90%)
+ *    - Types:
+ *      * Bugs: Damage plants and prevent harvesting
+ *      * Poison: Causes plants to lose 2 stages when watered
+ * 
+ * 5. Difficulty Levels: set in initGame at the end of the file
+ *    - easy: 4s growth timer, 10s events, 6 harvests needed
+ *    - medium: 5s growth timer, 6s events, 6 harvests needed
+ *    - hard: 6s growth timer, 3s events, 6 harvests needed
+ */
+
 updatePlantImage = (plant) => {
     plant.element.style.backgroundImage = `url(imgs/${plant.stage}.png)`;
 }
@@ -41,7 +67,7 @@ let game = {
     debugger: document.getElementById('garden-tool-debugger'),
     harvest: document.getElementById('garden-tool-harvest')
   },
-  game_stage_interval: 5000,
+  game_stage_interval: 3000,
   game_event_interval: 10000,
   game_max_plant_stage: 4,
   game_harvest_count: 0,
@@ -50,35 +76,25 @@ let game = {
   game_instructions: document.getElementById('garden-instructions'),
   game_information_progress: document.getElementById('garden-information-progress'),
   game_information_tool: document.getElementById('garden-information-tool'),
-  game_events:['bugs','bugs', 'bugs', 'bugs'],
-  game_event_chance: 1,
-  game_event: null
-}
-
-mediumDifficulty = {
-    game_stage_interval: 4000,
-    game_event_interval: 7000,
-    game_harvest_count_max: 12,
-    game_event_chance: 0.7
-}
-
-hardDifficulty = {
-    game_stage_interval: 2000,
-    game_event_interval: 3000,
-    game_harvest_count_max: 18,
-    game_event_chance: 0.9
+  game_events:['poison','bugs', 'nothing', 'bugs'],
+  game_event_chance: 0.5,
+  game_event: null,
+  gameEventInterval: null
 }
 
 setGameDifficulty = (difficulty) => {
     if(difficulty === 'medium'){
-        game = {...game, ...mediumDifficulty};
+        game.game_stage_interval = 4000;
+        game.game_event_interval = 6000;
+        game.game_event_chance = 0.7;
     }
     if(difficulty === 'hard'){
-        game = {...game, ...hardDifficulty};
+        game.game_stage_interval = 6000;
+        game.game_event_interval = 3000;
+        game.game_event_chance = 0.9;
+        game.game_events.push('bugs');
     }
 }
-
-
 
 
 initGame = (difficulty) => {
@@ -100,8 +116,48 @@ initGame = (difficulty) => {
 
   //set progress text
   game.game_information_progress.textContent = `Plants Harvested: ${game.game_harvest_count} / ${game.game_harvest_count_max}`;
-}
 
+  // create the game event interval 
+  game.gameEventInterval = setInterval(() => {
+    const event = document.getElementById('garden-event-text');
+    const randomEvent = game.game_events[Math.floor(Math.random() * game.game_events.length)];
+    game.game_event = randomEvent;
+
+    // if plants have bugs on them then we should reduce their progress by 1 
+    game.plants.forEach(plant => {
+      if (plant.hasBugs) {
+        plant.stage--;
+        if(plant.stage < 0){
+          plant.stage = 0;
+        }
+        updatePlantImage(plant);
+      }
+    });
+
+    if (Math.random() > game.game_event_chance){
+      event.textContent = 'Nothing!';
+      game.game_event = null;
+    }else{
+      switch (randomEvent) {
+          case 'poison':
+            event.textContent = 'Poisonous water! It kills your plants!';
+            break;
+          case 'bugs':
+            event.textContent = 'Pests! They are eating your plants!';
+            // enable bug overlays
+            game.plants.forEach(plant => {
+              plant.hasBugs = true;
+              const bugOverlay = plant.element.querySelector('.bug-overlay');
+              bugOverlay.style.backgroundImage = 'url(imgs/bugs.png)';
+              bugOverlay.style.opacity = '1';
+            });
+            break;
+          default:
+            event.textContent = 'Nothing!';
+        }
+    }
+  }, game.game_event_interval);
+}
 setSelectedTool = (tool) => {
   game.game_tools[game.game_selected_tool].classList.remove('active');
   game.game_tools[tool].classList.add('active');
@@ -110,15 +166,6 @@ setSelectedTool = (tool) => {
   
   game.game_selected_tool = tool;
   game.game_information_tool.textContent = `Selected Tool: ${tool}`;
-}
-
-setAllPlantsUnwatered = () => {
-  game.plants.forEach(plant => {
-    plant.watered_this_turn = false;
-    const waterOverlay = plant.element.querySelector('.water-overlay');
-    waterOverlay.style.backgroundImage = 'none';
-    waterOverlay.style.opacity = '0';
-  });
 }
 
 resetPlant = (plant) => {
@@ -147,9 +194,10 @@ plantClick = (plant) => {
         waterOverlay.style.opacity = '1';
         plant.watered_this_turn = true;
 
-        // Start the plant's timer if it hasn't started yet
         if (!plant.hasStarted) {
             plant.hasStarted = true;
+
+            // start the plant's timer
             plant.timer = setInterval(() => {
                 if (plant.stage > 0 && !plant.watered_this_turn) {
                     plant.stage--;
@@ -180,9 +228,15 @@ plantClick = (plant) => {
         updatePlantImage(plant);
     }
     if (plant.stage === game.game_max_plant_stage && game.game_selected_tool === 'harvest') {
-      game.game_harvest_count++;
+
+      if (plant.hasBugs) {
+        resetPlant(plant);
+      } else {
+        game.game_harvest_count++;
+        resetPlant(plant);
+      }
       game.game_information_progress.textContent = `Plants Harvested: ${game.game_harvest_count} / ${game.game_harvest_count_max}`;
-      resetPlant(plant);
+
     } else if (plant.stage < game.game_max_plant_stage && game.game_selected_tool === 'harvest') {
       resetPlant(plant);
     } else if (game.game_selected_tool === 'debugger' && plant.hasBugs) {
@@ -202,7 +256,7 @@ checkWinCondition = () => {
         plant.timer = null;
       }
     });
-    clearInterval(gameEventInterval);
+    clearInterval(game.gameEventInterval);
     const event = document.getElementById('garden-event');
     event.style.display = 'none';
     winTextColorizer();
@@ -236,46 +290,6 @@ winTextColorizer = () => {
   }, 500);
 }
 
-
-const gameEventInterval = setInterval(() => {
-  const event = document.getElementById('garden-event-text');
-  const randomEvent = game.game_events[Math.floor(Math.random() * game.game_events.length)];
-  game.game_event = randomEvent;
-
-  if (Math.random() > game.game_event_chance){
-    event.textContent = 'Nothing!';
-    game.game_event = null;
-  }else{
-    switch (randomEvent) {
-        case 'poison':
-          event.textContent = 'Poisonous water! It kills your plants!';
-          break;
-        case 'bugs':
-          event.textContent = 'Pests! They are eating your plants!';
-          // enable bug overlays
-          game.plants.forEach(plant => {
-            plant.hasBugs = true;
-            const bugOverlay = plant.element.querySelector('.bug-overlay');
-            bugOverlay.style.backgroundImage = 'url(imgs/bugs.png)';
-            bugOverlay.style.opacity = '1';
-          });
-          break;
-        case 'hot':
-          event.textContent = 'Sun Scald! It\'s too hot!';
-          break;
-        case 'robber':
-          event.textContent = 'Robber! They yoinked your plants!';
-          game.game_harvest_count = 0;
-          game.game_information_progress.textContent = `Plants Harvested: ${game.game_harvest_count} / ${game.game_harvest_count_max}`;
-          break;
-        default:
-          event.textContent = 'Nothing!';
-      }
-  }
-
-}, game.game_event_interval);
-
-
 captchaSuccess = () => {
   window.top.postMessage("success", '*');
 }
@@ -283,4 +297,6 @@ captchaSuccess = () => {
 game.solve
      .addEventListener('click', () => captchaSuccess()); 
 
-initGame('easy');
+//difficulties: easy, medium, hard
+
+initGame('hard');
