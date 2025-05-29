@@ -4,30 +4,45 @@
   <meta charset="utf-8">
   <title>Joel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <style type="text/css">
-    html,
-    body {
-      background: pink;
-      margin: 0;
-      padding: 0;
-      font-family: sans-serif;
-    }
-
-    #captcha-container {
-      background: white;
-      width: 390px;
-      height: 300px;
-    }
-
-    /* Your style here... */
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
   <div id="captcha-container">
-    <!-- Add your CAPTCHA here: -->
-    Hello world!
+    <div id="garden-container">
+      <div id="garden-instructions">
+          Harvest plants to solve the captcha.
+      </div>
+      <div id="garden-win-text"></div>
+      <div id="garden-event">
+        Event: <span id="garden-event-text">Nothing!</span>
+      </div>
+      <div id="garden">
+      </div>
+      <div id="garden-tools">
+        <button id="garden-tool-water">
+          <span class="tool-icon water-icon"></span>
+          Water
+        </button>
+        <button id="garden-tool-debugger">
+          <span class="tool-icon debugger-icon"></span>
+          Debugger
+        </button>
+        <button id="garden-tool-harvest">
+          <span class="tool-icon harvest-icon"></span>
+          Harvest
+        </button>
+      </div>
+
+      <div id="garden-information">
+        <div id="garden-information-progress">
+          Plants Harvested: <span id="garden-information-progress">0</span>
+        </div>
+        <div id="garden-information-tool">
+          Selected Tool: <span id="garden-information-tool">Water</span>
+        </div>
+      </div>
+    </div>
 
     <!-- We've added a sample button. Feel free to remove it: -->
     <button id="solve">
@@ -35,18 +50,6 @@
     </button>
   </div>
 
-  <script type="text/javascript">
-    (function(window, document){
-      // This is how you tell the parent window that the CAPTCHA was successful.
-      function captchaSuccess() {
-        window.top.postMessage("success", '*');
-      }
-
-      // Your CAPTCHA code goes here, we've added a simple example below:
-      document.getElementById('solve')
-           .addEventListener('click', () => captchaSuccess());
-
-    })(window, document);
-  </script>
+  <script src="script.js"></script>
 </body>
 </html>
