@@ -1,5 +1,5 @@
 /* Game Rules and Logic:
- * 1. Goal: Harvest a specific number of fully grown plants (6 for easy, 12 for medium, 18 for hard)
+ * 1. Goal: Harvest a specific number of fully grown plants
  * 
  * 2. Tools:
  *    - Water: Waters plants to help them grow
@@ -76,23 +76,34 @@ let game = {
   game_instructions: document.getElementById('garden-instructions'),
   game_information_progress: document.getElementById('garden-information-progress'),
   game_information_tool: document.getElementById('garden-information-tool'),
-  game_events:['poison','bugs', 'nothing', 'bugs'],
+  game_events:['poison','bugs', 'bugs', 'nothing'],
   game_event_chance: 0.5,
   game_event: null,
-  gameEventInterval: null
+  lastEventTime: 0,
+  lastPlantUpdateTimes: {},
+  animationFrameId: null,
+  running: false
 }
 
 setGameDifficulty = (difficulty) => {
     if(difficulty === 'medium'){
-        game.game_stage_interval = 4000;
-        game.game_event_interval = 6000;
+        game.game_stage_interval = 5000;
+        game.game_event_interval = 4000;
         game.game_event_chance = 0.7;
     }
     if(difficulty === 'hard'){
-        game.game_stage_interval = 6000;
+        game.game_stage_interval = 5000;
         game.game_event_interval = 3000;
         game.game_event_chance = 0.9;
         game.game_events.push('bugs');
+    }
+    if(difficulty === 'debug'){
+      //no bugs no events
+      game.game_events = ['nothing'];
+      game.game_event_chance = 0;
+      //fast interval
+      game.game_stage_interval = 500;
+      game.game_event_interval = 12300;
     }
 }
 
@@ -104,6 +115,7 @@ initGame = (difficulty) => {
   //add plants to garden
   game.plants.forEach(plant => {
     game.garden.appendChild(plant.element);
+    game.lastPlantUpdateTimes[plant.name] = 0;
   });
 
   //set event listeners for tools
@@ -117,8 +129,36 @@ initGame = (difficulty) => {
   //set progress text
   game.game_information_progress.textContent = `Plants Harvested: ${game.game_harvest_count} / ${game.game_harvest_count_max}`;
 
-  // create the game event interval 
-  game.gameEventInterval = setInterval(() => {
+  // Start the game loop
+  game.running = true;
+  game.lastEventTime = performance.now();
+  gameLoop();
+}
+
+const gameLoop = (timestamp) => {
+  if (!game.running) return;
+
+  // Handle plant updates
+  game.plants.forEach(plant => {
+    if (!plant.hasStarted) return;
+    
+    const lastUpdate = game.lastPlantUpdateTimes[plant.name];
+    if (timestamp - lastUpdate >= game.game_stage_interval) {
+      if (plant.stage > 0 && !plant.watered_this_turn) {
+        plant.stage--;
+        updatePlantImage(plant);
+      }
+      plant.watered_this_turn = false;
+      const waterOverlay = plant.element.querySelector('.water-overlay');
+      waterOverlay.style.backgroundImage = 'none';
+      waterOverlay.style.opacity = '0';
+      checkWinCondition();
+      game.lastPlantUpdateTimes[plant.name] = timestamp;
+    }
+  });
+
+  // Handle game events
+  if (timestamp - game.lastEventTime >= game.game_event_interval) {
     const event = document.getElementById('garden-event-text');
     const randomEvent = game.game_events[Math.floor(Math.random() * game.game_events.length)];
     game.game_event = randomEvent;
@@ -137,27 +177,31 @@ initGame = (difficulty) => {
     if (Math.random() > game.game_event_chance){
       event.textContent = 'Nothing!';
       game.game_event = null;
-    }else{
+    } else {
       switch (randomEvent) {
-          case 'poison':
-            event.textContent = 'Poisonous water! It kills your plants!';
-            break;
-          case 'bugs':
-            event.textContent = 'Pests! They are eating your plants!';
-            // enable bug overlays
-            game.plants.forEach(plant => {
-              plant.hasBugs = true;
-              const bugOverlay = plant.element.querySelector('.bug-overlay');
-              bugOverlay.style.backgroundImage = 'url(imgs/bugs.png)';
-              bugOverlay.style.opacity = '1';
-            });
-            break;
-          default:
-            event.textContent = 'Nothing!';
-        }
+        case 'poison':
+          event.textContent = 'Poisonous water! It kills your plants!';
+          break;
+        case 'bugs':
+          event.textContent = 'Pests! They are eating your plants!';
+          // enable bug overlays
+          game.plants.forEach(plant => {
+            plant.hasBugs = true;
+            const bugOverlay = plant.element.querySelector('.bug-overlay');
+            bugOverlay.style.backgroundImage = 'url(imgs/bugs.png)';
+            bugOverlay.style.opacity = '1';
+          });
+          break;
+        default:
+          event.textContent = 'Nothing!';
+      }
     }
-  }, game.game_event_interval);
+    game.lastEventTime = timestamp;
+  }
+
+  game.animationFrameId = requestAnimationFrame(gameLoop);
 }
+
 setSelectedTool = (tool) => {
   game.game_tools[game.game_selected_tool].classList.remove('active');
   game.game_tools[tool].classList.add('active');
@@ -172,11 +216,8 @@ resetPlant = (plant) => {
   plant.stage = 0;
   plant.watered_this_turn = false;
   plant.hasBugs = false;
-  if (plant.timer) {
-    clearInterval(plant.timer);
-    plant.timer = null;
-    plant.hasStarted = false;
-  }
+  plant.hasStarted = false;
+  game.lastPlantUpdateTimes[plant.name] = 0;
   // Clear all overlays
   const waterOverlay = plant.element.querySelector('.water-overlay');
   waterOverlay.style.backgroundImage = 'none';
@@ -196,19 +237,7 @@ plantClick = (plant) => {
 
         if (!plant.hasStarted) {
             plant.hasStarted = true;
-
-            // start the plant's timer
-            plant.timer = setInterval(() => {
-                if (plant.stage > 0 && !plant.watered_this_turn) {
-                    plant.stage--;
-                    updatePlantImage(plant);
-                }
-                plant.watered_this_turn = false;
-                const waterOverlay = plant.element.querySelector('.water-overlay');
-                waterOverlay.style.backgroundImage = 'none';
-                waterOverlay.style.opacity = '0';
-                checkWinCondition();
-            }, game.game_stage_interval);
+            game.lastPlantUpdateTimes[plant.name] = performance.now();
         }
 
         if (game.game_event === 'poison') {
@@ -249,14 +278,11 @@ plantClick = (plant) => {
 
 checkWinCondition = () => {
   if (game.game_harvest_count >= game.game_harvest_count_max) {
-    // Clear all plant timers
-    game.plants.forEach(plant => {
-      if (plant.timer) {
-        clearInterval(plant.timer);
-        plant.timer = null;
-      }
-    });
-    clearInterval(game.gameEventInterval);
+    // Stop the game loop
+    game.running = false;
+    if (game.animationFrameId) {
+      cancelAnimationFrame(game.animationFrameId);
+    }
     const event = document.getElementById('garden-event');
     event.style.display = 'none';
     winTextColorizer();
@@ -299,4 +325,4 @@ game.solve
 
 //difficulties: easy, medium, hard
 
-initGame('hard');
+initGame('medium');
