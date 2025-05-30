@@ -255,7 +255,15 @@ plantClick = (plant) => {
         }
 
         updatePlantImage(plant);
+    } else if (game.game_selected_tool === 'water' && plant.watered_this_turn){
+      console.log('degrowth');
+      plant.stage -= 1;
+      if (plant.stage < 0) {
+        plant.stage = 0;
+      }
+      updatePlantImage(plant);
     }
+
     if (plant.stage === game.game_max_plant_stage && game.game_selected_tool === 'harvest') {
 
       if (plant.hasBugs) {
